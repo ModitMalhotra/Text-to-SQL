@@ -1,0 +1,182 @@
+[
+  {
+    "id": "q01",
+    "difficulty": "easy",
+    "question": "How many orders have the status 'canceled'?",
+    "gold_sql": "SELECT COUNT(*) FROM orders WHERE order_status = 'canceled'"
+  },
+  {
+    "id": "q02",
+    "difficulty": "easy",
+    "question": "How many sellers are located in the state 'SP'?",
+    "gold_sql": "SELECT COUNT(*) FROM sellers WHERE seller_state = 'SP'"
+  },
+  {
+    "id": "q03",
+    "difficulty": "easy",
+    "question": "What is the highest single item price in order_items?",
+    "gold_sql": "SELECT MAX(price) FROM order_items"
+  },
+  {
+    "id": "q04",
+    "difficulty": "easy",
+    "question": "How many distinct product category names (Portuguese) exist in the products table?",
+    "gold_sql": "SELECT COUNT(DISTINCT product_category_name) FROM products"
+  },
+  {
+    "id": "q05",
+    "difficulty": "easy",
+    "question": "For each payment type, how many payment rows are there? Show payment_type and the count.",
+    "gold_sql": "SELECT payment_type, COUNT(*) FROM order_payments GROUP BY payment_type"
+  },
+  {
+    "id": "q06",
+    "difficulty": "easy",
+    "question": "How many reviews have a review_score of 5?",
+    "gold_sql": "SELECT COUNT(*) FROM order_reviews WHERE review_score = 5"
+  },
+  {
+    "id": "q07",
+    "difficulty": "easy",
+    "question": "What is the total freight_value across all order items, rounded to 2 decimals?",
+    "gold_sql": "SELECT ROUND(SUM(freight_value), 2) FROM order_items"
+  },
+  {
+    "id": "q08",
+    "difficulty": "easy",
+    "question": "How many rows in the customers table have customer_state 'RJ'?",
+    "gold_sql": "SELECT COUNT(*) FROM customers WHERE customer_state = 'RJ'"
+  },
+  {
+    "id": "q09",
+    "difficulty": "easy",
+    "question": "What is the average product_weight_g across products, ignoring nulls, rounded to 1 decimal?",
+    "gold_sql": "SELECT ROUND(AVG(product_weight_g), 1) FROM products"
+  },
+  {
+    "id": "q10",
+    "difficulty": "easy",
+    "question": "How many orders were purchased in the year 2017?",
+    "gold_sql": "SELECT COUNT(*) FROM orders WHERE strftime('%Y', order_purchase_timestamp) = '2017'"
+  },
+  {
+    "id": "q11",
+    "difficulty": "medium",
+    "question": "What are the 5 customer states with the most orders? Show customer_state and the number of orders, highest first.",
+    "gold_sql": "SELECT c.customer_state, COUNT(*) AS n FROM orders o JOIN customers c ON o.customer_id = c.customer_id GROUP BY c.customer_state ORDER BY n DESC LIMIT 5"
+  },
+  {
+    "id": "q12",
+    "difficulty": "medium",
+    "question": "What is the total revenue (sum of item price) from delivered orders, rounded to 2 decimals?",
+    "gold_sql": "SELECT ROUND(SUM(oi.price), 2) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.order_status = 'delivered'"
+  },
+  {
+    "id": "q13",
+    "difficulty": "medium",
+    "question": "What are the 5 product categories (English names) with the most order item rows? Show the English name and the count, highest first.",
+    "gold_sql": "SELECT t.product_category_name_english, COUNT(*) AS n FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name GROUP BY t.product_category_name_english ORDER BY n DESC LIMIT 5"
+  },
+  {
+    "id": "q14",
+    "difficulty": "medium",
+    "question": "How many distinct sellers have sold at least one item in the 'health_beauty' category (English name)?",
+    "gold_sql": "SELECT COUNT(DISTINCT oi.seller_id) FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name WHERE t.product_category_name_english = 'health_beauty'"
+  },
+  {
+    "id": "q15",
+    "difficulty": "medium",
+    "question": "What is the average review score for orders placed by customers in the state 'SP', rounded to 2 decimals?",
+    "gold_sql": "SELECT ROUND(AVG(r.review_score), 2) FROM order_reviews r JOIN orders o ON r.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id WHERE c.customer_state = 'SP'"
+  },
+  {
+    "id": "q16",
+    "difficulty": "medium",
+    "question": "How many delivered orders were delivered after their estimated delivery date? Ignore orders with a missing delivery date.",
+    "gold_sql": "SELECT COUNT(*) FROM orders WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL AND order_delivered_customer_date > order_estimated_delivery_date"
+  },
+  {
+    "id": "q17",
+    "difficulty": "medium",
+    "question": "What is the average number of days between purchase and delivery to the customer for delivered orders, rounded to 1 decimal? Ignore orders with a missing delivery date.",
+    "gold_sql": "SELECT ROUND(AVG(julianday(order_delivered_customer_date) - julianday(order_purchase_timestamp)), 1) FROM orders WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL"
+  },
+  {
+    "id": "q18",
+    "difficulty": "medium",
+    "question": "How many distinct orders were paid with at least one 'credit_card' payment?",
+    "gold_sql": "SELECT COUNT(DISTINCT order_id) FROM order_payments WHERE payment_type = 'credit_card'"
+  },
+  {
+    "id": "q19",
+    "difficulty": "medium",
+    "question": "Which seller state has the highest total item revenue (sum of price)? Show the state and the total rounded to 2 decimals.",
+    "gold_sql": "SELECT s.seller_state, ROUND(SUM(oi.price), 2) AS rev FROM order_items oi JOIN sellers s ON oi.seller_id = s.seller_id GROUP BY s.seller_state ORDER BY rev DESC LIMIT 1"
+  },
+  {
+    "id": "q20",
+    "difficulty": "medium",
+    "question": "What are the 3 customer cities with the most distinct customers (by customer_unique_id)? Show city and count, highest first.",
+    "gold_sql": "SELECT customer_city, COUNT(DISTINCT customer_unique_id) AS n FROM customers GROUP BY customer_city ORDER BY n DESC LIMIT 3"
+  },
+  {
+    "id": "q21",
+    "difficulty": "medium",
+    "question": "Among product categories (English names) with at least 100 order item rows, which 3 have the highest average freight_value? Show the English name and the average rounded to 2 decimals, highest first.",
+    "gold_sql": "SELECT t.product_category_name_english, ROUND(AVG(oi.freight_value), 2) AS f FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name GROUP BY t.product_category_name_english HAVING COUNT(*) >= 100 ORDER BY f DESC LIMIT 3"
+  },
+  {
+    "id": "q22",
+    "difficulty": "medium",
+    "question": "How many orders contain more than one item?",
+    "gold_sql": "SELECT COUNT(*) FROM (SELECT order_id FROM order_items GROUP BY order_id HAVING COUNT(*) > 1)"
+  },
+  {
+    "id": "q23",
+    "difficulty": "hard",
+    "question": "For delivered orders, what is the total item revenue (sum of price) in each purchase year? Show the year and revenue rounded to 2 decimals, ordered by year.",
+    "gold_sql": "SELECT strftime('%Y', o.order_purchase_timestamp) AS yr, ROUND(SUM(oi.price), 2) FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_status = 'delivered' GROUP BY yr ORDER BY yr"
+  },
+  {
+    "id": "q24",
+    "difficulty": "hard",
+    "question": "What is the average order value across delivered orders, where an order's value is the sum of its item prices? Round to 2 decimals.",
+    "gold_sql": "SELECT ROUND(AVG(v), 2) FROM (SELECT o.order_id, SUM(oi.price) AS v FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_status = 'delivered' GROUP BY o.order_id)"
+  },
+  {
+    "id": "q25",
+    "difficulty": "hard",
+    "question": "How many real customers (distinct customer_unique_id) placed more than one order?",
+    "gold_sql": "SELECT COUNT(*) FROM (SELECT c.customer_unique_id FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_unique_id HAVING COUNT(DISTINCT o.order_id) > 1)"
+  },
+  {
+    "id": "q26",
+    "difficulty": "hard",
+    "question": "What percentage of delivered orders (with a delivery date) were delivered after the estimated delivery date? Round to 2 decimals.",
+    "gold_sql": "SELECT ROUND(100.0 * SUM(CASE WHEN order_delivered_customer_date > order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*), 2) FROM orders WHERE order_status = 'delivered' AND order_delivered_customer_date IS NOT NULL"
+  },
+  {
+    "id": "q27",
+    "difficulty": "hard",
+    "question": "In which purchase month of 2017 (format YYYY-MM) was item revenue highest for delivered orders? Show the month and revenue rounded to 2 decimals.",
+    "gold_sql": "SELECT strftime('%Y-%m', o.order_purchase_timestamp) AS m, ROUND(SUM(oi.price), 2) AS rev FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_status = 'delivered' AND strftime('%Y', o.order_purchase_timestamp) = '2017' GROUP BY m ORDER BY rev DESC LIMIT 1"
+  },
+  {
+    "id": "q28",
+    "difficulty": "hard",
+    "question": "Which seller has the second-highest total item revenue (sum of price) across all orders? Show seller_id and total rounded to 2 decimals.",
+    "gold_sql": "SELECT seller_id, ROUND(SUM(price), 2) AS rev FROM order_items GROUP BY seller_id ORDER BY rev DESC LIMIT 1 OFFSET 1"
+  },
+  {
+    "id": "q29",
+    "difficulty": "hard",
+    "question": "How many orders include items from more than one seller?",
+    "gold_sql": "SELECT COUNT(*) FROM (SELECT order_id FROM order_items GROUP BY order_id HAVING COUNT(DISTINCT seller_id) > 1)"
+  },
+  {
+    "id": "q30",
+    "difficulty": "hard",
+    "question": "For delivered orders with a delivery date, which 3 customer states have the largest average margin in days between the estimated delivery date and the actual delivery date (estimated minus actual)? Show state and average margin rounded to 1 decimal, largest first.",
+    "gold_sql": "SELECT c.customer_state, ROUND(AVG(julianday(o.order_estimated_delivery_date) - julianday(o.order_delivered_customer_date)), 1) AS m FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL GROUP BY c.customer_state ORDER BY m DESC LIMIT 3"
+  }
+]

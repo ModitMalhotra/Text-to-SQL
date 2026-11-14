@@ -1,0 +1,9 @@
+{
+  "h05": "wrong_metric_definition",
+  "h12": "wrong_metric_definition",
+  "h14": "wrong_metric_definition",
+  "h06": "wrong_grain_fan_out",
+  "h07": "wrong_grain_rows_not_distinct",
+  "h29": "wrong_grain_rows_not_distinct",
+  "h27": "wrong_output_shape"
+}

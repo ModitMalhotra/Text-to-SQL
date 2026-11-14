@@ -1,0 +1,6 @@
+.env
+cache/
+olist.db
+raw_data/
+eval/runs/
+__pycache__/

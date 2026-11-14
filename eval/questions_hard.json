@@ -1,0 +1,212 @@
+[
+  {
+    "id": "h01",
+    "difficulty": "medium",
+    "question": "Which product category brings in the most money from delivered orders, and how much?",
+    "gold_sql": "SELECT t.product_category_name_english, SUM(oi.price) AS rev FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name WHERE o.order_status = 'delivered' GROUP BY 1 ORDER BY rev DESC LIMIT 1",
+    "note": "revenue = SUM(price), delivered orders only, English category name"
+  },
+  {
+    "id": "h02",
+    "difficulty": "medium",
+    "question": "What share of our sellers are based in Sao Paulo state?",
+    "gold_sql": "SELECT 100.0 * SUM(CASE WHEN seller_state = 'SP' THEN 1 ELSE 0 END) / COUNT(*) FROM sellers",
+    "note": "percentage 0-100"
+  },
+  {
+    "id": "h03",
+    "difficulty": "hard",
+    "question": "How many customers have ordered more than once, and what percentage of all customers is that?",
+    "gold_sql": "SELECT COUNT(*), 100.0 * COUNT(*) / (SELECT COUNT(DISTINCT customer_unique_id) FROM customers) FROM (SELECT c.customer_unique_id FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_unique_id HAVING COUNT(DISTINCT o.order_id) > 1)",
+    "note": "customer = customer_unique_id; denominator is all unique customers"
+  },
+  {
+    "id": "h04",
+    "difficulty": "medium",
+    "question": "Which 5 states have the slowest average delivery time in days, counting delivered orders only?",
+    "gold_sql": "SELECT c.customer_state, AVG(julianday(o.order_delivered_customer_date) - julianday(o.order_purchase_timestamp)) AS d FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL GROUP BY 1 ORDER BY d DESC LIMIT 5",
+    "note": "delivery time = purchase to customer delivery"
+  },
+  {
+    "id": "h05",
+    "difficulty": "hard",
+    "question": "For each month of 2017, show delivered revenue and how much it changed compared with the previous month.",
+    "gold_sql": "SELECT m, rev, rev - LAG(rev) OVER (ORDER BY m) AS change FROM (SELECT strftime('%Y-%m', o.order_purchase_timestamp) AS m, SUM(oi.price) AS rev FROM orders o JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_status = 'delivered' AND strftime('%Y', o.order_purchase_timestamp) = '2017' GROUP BY m)",
+    "note": "first month change is NULL"
+  },
+  {
+    "id": "h06",
+    "difficulty": "hard",
+    "question": "Which sellers have an average review score below 3 and at least 30 reviews? Show the seller and the average.",
+    "gold_sql": "SELECT seller_id, AVG(review_score) AS a FROM (SELECT DISTINCT oi.seller_id, oi.order_id FROM order_items oi) so JOIN order_reviews r ON so.order_id = r.order_id GROUP BY seller_id HAVING COUNT(*) >= 30 AND a < 3 ORDER BY a",
+    "note": "reviews attach to a seller via the orders they fulfilled; each (seller, order) counted once"
+  },
+  {
+    "id": "h07",
+    "difficulty": "medium",
+    "question": "What percentage of orders were paid in more than one installment?",
+    "gold_sql": "SELECT 100.0 * COUNT(DISTINCT CASE WHEN payment_installments > 1 THEN order_id END) / COUNT(DISTINCT order_id) FROM order_payments",
+    "note": "orders that appear in order_payments; any payment with installments > 1"
+  },
+  {
+    "id": "h08",
+    "difficulty": "easy",
+    "question": "Show the average payment value for each payment type, highest first.",
+    "gold_sql": "SELECT payment_type, AVG(payment_value) AS a FROM order_payments GROUP BY payment_type ORDER BY a DESC",
+    "note": "all payment rows"
+  },
+  {
+    "id": "h09",
+    "difficulty": "hard",
+    "question": "Who are the top 5 sellers by number of delivered orders, and how much revenue did each make from those orders?",
+    "gold_sql": "SELECT oi.seller_id, COUNT(DISTINCT oi.order_id) AS n, SUM(oi.price) AS rev FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.order_status = 'delivered' GROUP BY 1 ORDER BY n DESC LIMIT 5",
+    "note": "orders counted distinct per seller"
+  },
+  {
+    "id": "h10",
+    "difficulty": "medium",
+    "question": "How many orders arrived more than 10 days later than promised?",
+    "gold_sql": "SELECT COUNT(*) FROM orders WHERE order_status = 'delivered' AND julianday(order_delivered_customer_date) - julianday(order_estimated_delivery_date) > 10",
+    "note": "delivered orders only"
+  },
+  {
+    "id": "h11",
+    "difficulty": "hard",
+    "question": "Compare the average review score of orders that arrived on time with those that arrived late.",
+    "gold_sql": "SELECT CASE WHEN o.order_delivered_customer_date <= o.order_estimated_delivery_date THEN 'on_time' ELSE 'late' END AS status, AVG(r.review_score) FROM orders o JOIN order_reviews r ON o.order_id = r.order_id WHERE o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL GROUP BY status",
+    "note": "labels on_time and late; delivered orders only"
+  },
+  {
+    "id": "h12",
+    "difficulty": "hard",
+    "question": "Which customer state has the highest average order value, and what is it?",
+    "gold_sql": "SELECT customer_state, AVG(v) AS a FROM (SELECT c.customer_state, o.order_id, SUM(oi.price) AS v FROM orders o JOIN customers c ON o.customer_id = c.customer_id JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_status = 'delivered' GROUP BY o.order_id) GROUP BY customer_state ORDER BY a DESC LIMIT 1",
+    "note": "order value = sum of item prices, delivered only"
+  },
+  {
+    "id": "h13",
+    "difficulty": "hard",
+    "question": "Which 5 product categories have the highest freight cost relative to price, counting only categories with at least 100 items sold?",
+    "gold_sql": "SELECT t.product_category_name_english, SUM(oi.freight_value) / SUM(oi.price) AS ratio FROM order_items oi JOIN products p ON oi.product_id = p.product_id JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name GROUP BY 1 HAVING COUNT(*) >= 100 ORDER BY ratio DESC LIMIT 5",
+    "note": "ratio = total freight / total price"
+  },
+  {
+    "id": "h14",
+    "difficulty": "hard",
+    "question": "Who are our top 5 customers by total spend on delivered orders?",
+    "gold_sql": "SELECT c.customer_unique_id, SUM(oi.price) AS s FROM customers c JOIN orders o ON c.customer_id = o.customer_id JOIN order_items oi ON o.order_id = oi.order_id WHERE o.order_status = 'delivered' GROUP BY 1 ORDER BY s DESC LIMIT 5",
+    "note": "customer = customer_unique_id; spend = SUM(price)"
+  },
+  {
+    "id": "h15",
+    "difficulty": "medium",
+    "question": "How many sellers have sold products from more than 5 different categories?",
+    "gold_sql": "SELECT COUNT(*) FROM (SELECT oi.seller_id FROM order_items oi JOIN products p ON oi.product_id = p.product_id WHERE p.product_category_name IS NOT NULL GROUP BY oi.seller_id HAVING COUNT(DISTINCT p.product_category_name) > 5)",
+    "note": "categories with NULL name ignored"
+  },
+  {
+    "id": "h16",
+    "difficulty": "medium",
+    "question": "Which day of the week do customers place the most orders? Give the weekday number (0 = Sunday) and the order count.",
+    "gold_sql": "SELECT strftime('%w', order_purchase_timestamp) AS wd, COUNT(*) AS n FROM orders GROUP BY wd ORDER BY n DESC LIMIT 1",
+    "note": "all orders"
+  },
+  {
+    "id": "h17",
+    "difficulty": "hard",
+    "question": "What was the cancellation rate in each month of 2018?",
+    "gold_sql": "SELECT strftime('%Y-%m', order_purchase_timestamp) AS m, 100.0 * SUM(CASE WHEN order_status = 'canceled' THEN 1 ELSE 0 END) / COUNT(*) FROM orders WHERE strftime('%Y', order_purchase_timestamp) = '2018' GROUP BY m ORDER BY m",
+    "note": "percentage 0-100 by purchase month"
+  },
+  {
+    "id": "h18",
+    "difficulty": "medium",
+    "question": "Which product appears in the most distinct orders, and in how many?",
+    "gold_sql": "SELECT product_id, COUNT(DISTINCT order_id) AS n FROM order_items GROUP BY product_id ORDER BY n DESC LIMIT 1",
+    "note": ""
+  },
+  {
+    "id": "h19",
+    "difficulty": "medium",
+    "question": "How many delivered orders took longer than 30 days from purchase to arrival?",
+    "gold_sql": "SELECT COUNT(*) FROM orders WHERE order_status = 'delivered' AND julianday(order_delivered_customer_date) - julianday(order_purchase_timestamp) > 30",
+    "note": ""
+  },
+  {
+    "id": "h20",
+    "difficulty": "hard",
+    "question": "How much money was paid through each payment method on delivered orders?",
+    "gold_sql": "SELECT p.payment_type, SUM(p.payment_value) FROM order_payments p JOIN orders o ON p.order_id = o.order_id WHERE o.order_status = 'delivered' GROUP BY 1",
+    "note": "uses payment_value, not item price"
+  },
+  {
+    "id": "h21",
+    "difficulty": "hard",
+    "question": "Among delivered orders, what share of reviews gave 4 or 5 stars?",
+    "gold_sql": "SELECT 100.0 * SUM(CASE WHEN r.review_score >= 4 THEN 1 ELSE 0 END) / COUNT(*) FROM order_reviews r JOIN orders o ON r.order_id = o.order_id WHERE o.order_status = 'delivered'",
+    "note": "review rows, percentage 0-100"
+  },
+  {
+    "id": "h22",
+    "difficulty": "hard",
+    "question": "How many sellers have never had an order delivered?",
+    "gold_sql": "SELECT COUNT(*) FROM sellers WHERE seller_id NOT IN (SELECT oi.seller_id FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.order_status = 'delivered')",
+    "note": ""
+  },
+  {
+    "id": "h23",
+    "difficulty": "medium",
+    "question": "On average, how many items are in a delivered order?",
+    "gold_sql": "SELECT COUNT(*) * 1.0 / COUNT(DISTINCT oi.order_id) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id WHERE o.order_status = 'delivered'",
+    "note": ""
+  },
+  {
+    "id": "h24",
+    "difficulty": "hard",
+    "question": "Which month of 2017 had the most first-time customers, and how many?",
+    "gold_sql": "SELECT m, COUNT(*) AS n FROM (SELECT c.customer_unique_id, strftime('%Y-%m', MIN(o.order_purchase_timestamp)) AS m FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_unique_id) WHERE m LIKE '2017-%' GROUP BY m ORDER BY n DESC LIMIT 1",
+    "note": "first-time = month of a customer_unique_id's earliest order"
+  },
+  {
+    "id": "h25",
+    "difficulty": "hard",
+    "question": "What percentage of items were shipped to a customer in the same state as the seller?",
+    "gold_sql": "SELECT 100.0 * SUM(CASE WHEN c.customer_state = s.seller_state THEN 1 ELSE 0 END) / COUNT(*) FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN customers c ON o.customer_id = c.customer_id JOIN sellers s ON oi.seller_id = s.seller_id",
+    "note": "counts order_items rows, all order statuses, percentage 0-100"
+  },
+  {
+    "id": "h26",
+    "difficulty": "medium",
+    "question": "Which 5 cities have the most sellers, and how many do they have?",
+    "gold_sql": "SELECT seller_city, COUNT(*) AS n FROM sellers GROUP BY seller_city ORDER BY n DESC LIMIT 5",
+    "note": ""
+  },
+  {
+    "id": "h27",
+    "difficulty": "hard",
+    "question": "What is the median item price?",
+    "gold_sql": "SELECT AVG(price) FROM (SELECT price FROM order_items ORDER BY price LIMIT 2 - (SELECT COUNT(*) FROM order_items) % 2 OFFSET (SELECT (COUNT(*) - 1) / 2 FROM order_items))",
+    "note": "median of order_items.price over all rows"
+  },
+  {
+    "id": "h28",
+    "difficulty": "hard",
+    "question": "For each year, which product category earned the most revenue from delivered orders, and how much?",
+    "gold_sql": "SELECT yr, cat, rev FROM (SELECT strftime('%Y', o.order_purchase_timestamp) AS yr, t.product_category_name_english AS cat, SUM(oi.price) AS rev, ROW_NUMBER() OVER (PARTITION BY strftime('%Y', o.order_purchase_timestamp) ORDER BY SUM(oi.price) DESC) AS rn FROM order_items oi JOIN orders o ON oi.order_id = o.order_id JOIN products p ON oi.product_id = p.product_id JOIN product_category_name_translation t ON p.product_category_name = t.product_category_name WHERE o.order_status = 'delivered' GROUP BY yr, cat) WHERE rn = 1 ORDER BY yr",
+    "note": "one row per year"
+  },
+  {
+    "id": "h29",
+    "difficulty": "hard",
+    "question": "What percentage of delivered orders were paid with more than one payment method?",
+    "gold_sql": "SELECT 100.0 * SUM(CASE WHEN k > 1 THEN 1 ELSE 0 END) / COUNT(*) FROM (SELECT p.order_id, COUNT(DISTINCT p.payment_type) AS k FROM order_payments p JOIN orders o ON p.order_id = o.order_id WHERE o.order_status = 'delivered' GROUP BY p.order_id)",
+    "note": "distinct payment_type per order"
+  },
+  {
+    "id": "h30",
+    "difficulty": "medium",
+    "question": "On average, how many days pass between an order being approved and the carrier picking it up, for delivered orders?",
+    "gold_sql": "SELECT AVG(julianday(order_delivered_carrier_date) - julianday(order_approved_at)) FROM orders WHERE order_status = 'delivered' AND order_delivered_carrier_date IS NOT NULL AND order_approved_at IS NOT NULL",
+    "note": ""
+  }
+]
