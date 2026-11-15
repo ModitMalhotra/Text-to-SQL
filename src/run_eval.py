@@ -1,13 +1,14 @@
 import argparse
 import json
 import statistics
-import time
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
 from executor import run_sql
-from llm import MODEL, generate
+from llm import MODEL
+from fewshot import fewshot_block
+from pipeline import answer
 from schema import build_schema
 from taxonomy import classify_error, classify_wrong
 
@@ -55,17 +56,7 @@ def same_result(gold_rows, pred_rows):
     return True
 
 
-def generate_with_retry(question, schema, model, run, attempts=5):
-    for i in range(attempts):
-        try:
-            return generate(question, schema, model, run)
-        except Exception:
-            if i == attempts - 1:
-                raise
-            time.sleep(5 * (i + 1))
-
-
-def evaluate_run(questions, gold, schema, model, run, labels):
+def evaluate_run(questions, gold, schema, model, run, labels, retries):
     entries = []
     for q in questions:
         entry = {
@@ -78,39 +69,41 @@ def evaluate_run(questions, gold, schema, model, run, labels):
             "correct": False,
             "category": None,
             "error": None,
+            "attempts": None,
             "latency_s": None,
             "input_tokens": None,
             "output_tokens": None,
             "cached": None,
         }
         try:
-            gen = generate_with_retry(q["question"], schema, model, run)
+            res = answer(q["question"], schema, DB, model, run, retries)
         except Exception as e:
             entry["category"] = "api_error"
             entry["error"] = f"{type(e).__name__}: {e}"
             entries.append(entry)
             print(f"run{run} {q['id']} {q['difficulty']:6s} BAD  api_error")
             continue
+        entry["pred_sql"] = res["sql"]
+        entry["attempts"] = len(res["attempts"])
         for k in ("latency_s", "input_tokens", "output_tokens", "cached"):
-            entry[k] = gen[k]
-        entry["pred_sql"] = gen["sql"]
+            entry[k] = res[k]
         gold_cols, gold_rows = gold[q["id"]]
-        try:
-            pred_cols, pred_rows = run_sql(DB, gen["sql"])
-            if same_result(gold_rows, pred_rows):
+        if res["error"] is None:
+            if same_result(gold_rows, res["rows"]):
                 entry["correct"] = True
                 entry["category"] = "correct"
             else:
-                entry["category"] = classify_wrong(gold_cols, gold_rows, pred_cols, pred_rows)
+                entry["category"] = classify_wrong(gold_cols, gold_rows, res["cols"], res["rows"])
                 entry["category"] = labels.get(q["id"], entry["category"])
-        except Exception as e:
-            entry["error"] = f"{type(e).__name__}: {e}"
-            entry["category"] = classify_error(entry["error"])
+        else:
+            entry["error"] = res["error"]
+            entry["category"] = classify_error(res["error"])
         mark = "OK " if entry["correct"] else "BAD"
-        print(f"run{run} {q['id']} {q['difficulty']:6s} {mark}  {entry['category'] if not entry['correct'] else ''}")
+        note = entry["category"] if not entry["correct"] else ""
+        if entry["correct"] and entry["attempts"] > 1:
+            note = f"fixed after {entry['attempts']} attempts"
+        print(f"run{run} {q['id']} {q['difficulty']:6s} {mark}  {note}")
         entries.append(entry)
-        if not gen["cached"]:
-            time.sleep(1)
     return entries
 
 
@@ -143,6 +136,9 @@ def summarize(entries, runs):
     by_q = defaultdict(list)
     for e in entries:
         by_q[e["id"]].append(e["correct"])
+    tried = [e["attempts"] for e in entries if e["attempts"]]
+    out["mean_attempts"] = round(statistics.mean(tried), 2) if tried else 1.0
+    out["fixed_by_retry_per_run"] = round(sum(1 for e in entries if e["correct"] and (e["attempts"] or 1) > 1) / runs, 1)
     out["unstable_questions"] = sorted(i for i, v in by_q.items() if 0 < sum(v) < len(v))
     out["always_wrong"] = sorted(i for i, v in by_q.items() if sum(v) == 0)
     lat = [e["latency_s"] for e in entries if e["latency_s"] is not None]
@@ -163,6 +159,8 @@ def print_summary(s, runs):
     print("Failure categories (avg per run):")
     for k, v in s["failure_categories_avg_per_run"].items():
         print(f"  {k:20s} {v}")
+    if s["mean_attempts"] > 1:
+        print(f"Mean attempts per question: {s['mean_attempts']} | fixed by retry (avg per run): {s['fixed_by_retry_per_run']}")
     if runs > 1:
         print(f"Unstable questions: {s['unstable_questions']}")
     print(f"Always wrong: {s['always_wrong']}")
@@ -176,27 +174,33 @@ def main():
     ap.add_argument("--no-hints", action="store_true")
     ap.add_argument("--runs", type=int, default=1)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--retries", type=int, default=0)
+    ap.add_argument("--fewshot", action="store_true")
+    ap.add_argument("--samples", action="store_true")
+    ap.add_argument("--rules", action="store_true")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.questions).read_text())
     if args.limit:
         questions = questions[: args.limit]
     labels = json.loads(LABELS.read_text()) if LABELS.exists() else {}
-    schema = build_schema(DB, include_hints=not args.no_hints)
+    schema = build_schema(DB, include_hints=not args.no_hints, include_samples=args.samples, include_rules=args.rules)
+    if args.fewshot:
+        schema = schema + "\n\n" + fewshot_block()
     gold = {q["id"]: run_sql(DB, q["gold_sql"]) for q in questions}
 
     entries = []
     for run in range(args.runs):
-        entries += evaluate_run(questions, gold, schema, args.model, run, labels)
+        entries += evaluate_run(questions, gold, schema, args.model, run, labels, args.retries)
 
     summary = summarize(entries, args.runs)
     print_summary(summary, args.runs)
 
-    tag = "nohints" if args.no_hints else "hints"
+    tag = ("nohints" if args.no_hints else "hints") + ("_smp" if args.samples else "") + ("_rul" if args.rules else "") + ("_fs" if args.fewshot else "")
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = RUNS_DIR / f"{stamp}_{Path(args.questions).stem}_{tag}_{args.model}"
+    out_dir = RUNS_DIR / f"{stamp}_{Path(args.questions).stem}_{tag}_r{args.retries}_{args.model}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    meta = {"model": args.model, "hints": not args.no_hints, "questions": args.questions, "runs": args.runs}
+    meta = {"model": args.model, "hints": not args.no_hints, "questions": args.questions, "runs": args.runs, "retries": args.retries, "fewshot": args.fewshot, "samples": args.samples, "rules": args.rules}
     (out_dir / "results.json").write_text(json.dumps({"meta": meta, "entries": entries}, indent=2))
     (out_dir / "summary.json").write_text(json.dumps({"meta": meta, **summary}, indent=2))
     print(f"\nSaved to {out_dir}")

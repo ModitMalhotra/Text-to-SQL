@@ -22,7 +22,41 @@ Notes:
 """
 
 
-def build_schema(db_path: str, include_hints: bool = True) -> str:
+RULES = """\
+Query-writing rules:
+- order_items has one row per item and order_payments has one row per payment. When a question is about orders, count COUNT(DISTINCT order_id); do not count joined rows.
+- An order can have several items, payments and reviews. Joining order_items to order_reviews or order_payments repeats rows. Reduce to distinct orders first (a subquery) or aggregate each table separately before combining.
+- A payment method is order_payments.payment_type, not payment_sequential.
+- When ranking or comparing groups, return both the group and the value used for the ranking.
+"""
+
+MAX_TEXT_VALUES = 30
+MAX_INT_VALUES = 10
+
+
+def column_values(con, table, column, col_type):
+    limit = (
+        MAX_TEXT_VALUES
+        if col_type == "TEXT"
+        else MAX_INT_VALUES if col_type == "INTEGER" else 0
+    )
+    if not limit:
+        return None
+    rows = con.execute(
+        f"SELECT DISTINCT {column} FROM {table} WHERE {column} IS NOT NULL ORDER BY 1 LIMIT {limit + 1}"
+    ).fetchall()
+    if len(rows) > limit:
+        return None
+    return [r[0] for r in rows]
+
+
+def format_values(values):
+    return ", ".join(f"'{v}'" if isinstance(v, str) else str(v) for v in values)
+
+
+def build_schema(
+    db_path, include_hints=True, include_samples=False, include_rules=False
+):
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     rows = con.execute(
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -32,13 +66,25 @@ def build_schema(db_path: str, include_hints: bool = True) -> str:
         if name in EXCLUDE:
             continue
         cols = con.execute(f"PRAGMA table_info({name})").fetchall()
-        body = ",\n".join(f"  {c[1]} {c[2]}" for c in cols)
-        parts.append(f"CREATE TABLE {name} (\n{body}\n);")
+        lines = []
+        for i, c in enumerate(cols):
+            line = f"  {c[1]} {c[2]}" + ("," if i < len(cols) - 1 else "")
+            if include_samples:
+                values = column_values(con, name, c[1], c[2])
+                if values:
+                    line += f" -- values: {format_values(values)}"
+            lines.append(line)
+        parts.append(f"CREATE TABLE {name} (\n" + "\n".join(lines) + "\n);")
     con.close()
     out = "\n\n".join(parts)
-    return out + ("\n\n" + JOIN_HINTS if include_hints else "")
+    if include_hints:
+        out += "\n\n" + JOIN_HINTS
+    if include_rules:
+        out += "\n" + RULES
+    return out
 
 
 if __name__ == "__main__":
     import sys
+
     print(build_schema(sys.argv[1]))

@@ -29,12 +29,21 @@ def clean_sql(text):
     return (m.group(1) if m else text).strip()
 
 
-def build_prompt(question, schema):
-    return PROMPT.format(schema=schema, question=question)
+def build_prompt(question, schema, feedback=None):
+    prompt = PROMPT.format(schema=schema, question=question)
+    if not feedback:
+        return prompt
+    parts = [prompt.rsplit("SQL:", 1)[0].rstrip()]
+    for i, (sql, error) in enumerate(feedback, 1):
+        parts.append(f"Attempt {i}:\n{sql}\nProblem: {error}")
+    parts.append(
+        "Fix the problem and return only the corrected SQL, with no explanation and no markdown.\nCorrected SQL:"
+    )
+    return "\n\n".join(parts)
 
 
-def generate(question, schema, model=MODEL, run=0):
-    prompt = build_prompt(question, schema)
+def generate(question, schema, model=MODEL, run=0, feedback=None):
+    prompt = build_prompt(question, schema, feedback)
     key = cache.make_key(model, prompt, run)
     hit = cache.load(key)
     if hit is not None:
