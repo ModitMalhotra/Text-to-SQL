@@ -1,9 +1,11 @@
+import os
 import time
 
 from executor import run_sql
 from llm import generate
 from taxonomy import classify_error
 
+INTERVAL_S = float(os.environ.get("CALL_INTERVAL_S", "1"))
 TIMEOUT_MESSAGE = (
     "the query was stopped because it ran for too long; rewrite it to be more efficient"
 )
@@ -34,7 +36,7 @@ def answer(question, schema, db, model, run, max_retries=0):
     for _ in range(max_retries + 1):
         gen = generate_with_retry(question, schema, model, run, feedback or None)
         if not gen["cached"]:
-            time.sleep(1)
+            time.sleep(INTERVAL_S)
         attempts.append(gen)
         try:
             cols, rows = run_sql(db, gen["sql"])
@@ -49,6 +51,15 @@ def answer(question, schema, db, model, run, max_retries=0):
         "rows": rows,
         "error": last_error,
         "attempts": attempts,
+        "model": model,
+        "usage": [
+            {
+                "model": model,
+                "input_tokens": a["input_tokens"] or 0,
+                "output_tokens": a["output_tokens"] or 0,
+            }
+            for a in attempts
+        ],
         "latency_s": round(sum(a["latency_s"] or 0 for a in attempts), 3),
         "input_tokens": sum(a["input_tokens"] or 0 for a in attempts),
         "output_tokens": sum(a["output_tokens"] or 0 for a in attempts),

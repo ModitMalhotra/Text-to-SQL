@@ -53,10 +53,13 @@ def generate(question, schema, model=MODEL, run=0, feedback=None):
     resp = client.models.generate_content(model=model, contents=prompt)
     latency = time.time() - start
     usage = getattr(resp, "usage_metadata", None)
+    visible = getattr(usage, "candidates_token_count", None) or 0
+    thinking = getattr(usage, "thoughts_token_count", None) or 0
     entry = {
         "sql": clean_sql(resp.text),
         "input_tokens": getattr(usage, "prompt_token_count", None),
-        "output_tokens": getattr(usage, "candidates_token_count", None),
+        "output_tokens": visible + thinking,
+        "thinking_tokens": thinking,
         "latency_s": round(latency, 3),
     }
     cache.save(key, entry)
