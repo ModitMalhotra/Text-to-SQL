@@ -164,21 +164,28 @@ class SemanticCache:
         self.guard = guard
         self.questions = []
         self.sqls = []
+        self.results = []
+        self.meta = {}
         self.matrix = None
 
     def __len__(self):
         return len(self.questions)
 
-    def add(self, question, sql):
-        self.add_many([(question, sql)])
+    def add(self, question, sql, result=None):
+        self.add_many([(question, sql, result)])
 
     def add_many(self, items):
         if not items:
             return
-        vecs = self.embedder.encode([q for q, _ in items])
+        items = [tuple(item) + (None,) * (3 - len(item)) for item in items]
+        vecs = self.embedder.encode([item[0] for item in items])
         self.matrix = vecs if self.matrix is None else np.vstack([self.matrix, vecs])
-        self.questions.extend(q for q, _ in items)
-        self.sqls.extend(s for _, s in items)
+        self.questions.extend(item[0] for item in items)
+        self.sqls.extend(item[1] for item in items)
+        self.results.extend(item[2] for item in items)
+
+    def set_result(self, index, result):
+        self.results[index] = result
 
     def search(self, question):
         start = time.perf_counter()
@@ -205,6 +212,7 @@ class SemanticCache:
                 "index": int(idx),
                 "score": score,
                 "sql": self.sqls[idx],
+                "result": self.results[idx],
                 "matched_question": self.questions[idx],
             }
         return None
@@ -226,8 +234,10 @@ class SemanticCache:
             json.dump(
                 {
                     "model": self.embedder.name,
+                    "meta": self.meta,
                     "questions": self.questions,
                     "sqls": self.sqls,
+                    "results": self.results,
                 },
                 f,
             )
@@ -239,6 +249,8 @@ class SemanticCache:
             data = json.load(f)
         cache.questions = data["questions"]
         cache.sqls = data["sqls"]
+        cache.results = data.get("results") or [None] * len(cache.questions)
+        cache.meta = data.get("meta", {})
         matrix = np.load(path + ".npy")
         cache.matrix = matrix if len(cache.questions) else None
         return cache

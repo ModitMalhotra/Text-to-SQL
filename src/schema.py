@@ -1,3 +1,5 @@
+"""Build the schema section of the prompt from a SQLite db."""
+
 import sqlite3
 
 EXCLUDE = {"geolocation"}

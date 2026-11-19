@@ -9,7 +9,7 @@ from pathlib import Path
 from executor import run_sql
 from llm import MODEL, STRONG_MODEL
 from fewshot import fewshot_block
-from pipeline import answer
+from pipeline import QuotaExhausted, answer
 from pricing import PRICE_SETS, costs
 from router import TRIGGERS, answer_routed
 from schema import build_schema
@@ -99,6 +99,8 @@ def evaluate_run(questions, gold, schema, model, run, labels, retries, router=No
                 )
             else:
                 res = answer(q["question"], schema, DB, model, run, retries)
+        except QuotaExhausted:
+            raise
         except Exception as e:
             entry["category"] = "api_error"
             entry["error"] = f"{type(e).__name__}: {e}"
@@ -331,9 +333,14 @@ def main():
     gold = {q["id"]: run_sql(DB, q["gold_sql"]) for q in questions}
 
     entries = []
-    for run in range(args.runs):
-        entries += evaluate_run(
-            questions, gold, schema, args.model, run, labels, args.retries, router
+    try:
+        for run in range(args.runs):
+            entries += evaluate_run(
+                questions, gold, schema, args.model, run, labels, args.retries, router
+            )
+    except QuotaExhausted as e:
+        raise SystemExit(
+            f"\n{e}\nNothing was saved for this run; rerun the same command and it will resume from the cache."
         )
 
     summary = summarize(entries, args.runs)
